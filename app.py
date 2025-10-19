@@ -1,11 +1,18 @@
-# app.py
+import streamlit as st
 import sqlite3
+from datetime import datetime
+import pandas as pd
+import plotly.express as px
 
-# Connect to database (will create if not exists)
+st.set_page_config(page_title="Transport Management System", layout="wide")
+
+# --------------------------
+# Database setup
+# --------------------------
 conn = sqlite3.connect("transport.db", check_same_thread=False)
 c = conn.cursor()
 
-# Create drivers table if it doesn't exist
+# Create tables if they don't exist
 c.execute('''
 CREATE TABLE IF NOT EXISTS drivers (
     driver_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -15,145 +22,119 @@ CREATE TABLE IF NOT EXISTS drivers (
 )
 ''')
 
-# Create vehicles table if needed
 c.execute('''
 CREATE TABLE IF NOT EXISTS vehicles (
     vehicle_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    vehicle_name TEXT,
-    petrol_expense REAL,
-    toll_expense REAL,
-    maintenance_expense REAL,
+    name TEXT,
+    petrol_expense REAL DEFAULT 0,
+    toll_expense REAL DEFAULT 0,
+    maintenance_expense REAL DEFAULT 0,
     month TEXT
 )
 ''')
 
 conn.commit()
 
-import streamlit as st
-import sqlite3
-import pandas as pd
-import plotly.express as px
-from datetime import datetime, date
+# --------------------------
+# Helper functions
+# --------------------------
+def insert_driver(name, license_number, mobile):
+    c.execute("INSERT INTO drivers (name, license_number, mobile) VALUES (?, ?, ?)",
+              (name, license_number, mobile))
+    conn.commit()
 
-# -------- Database setup --------
-conn = sqlite3.connect("transport.db", check_same_thread=False)
-c = conn.cursor()
+def insert_vehicle(name):
+    month = datetime.now().strftime("%Y-%m")
+    c.execute("INSERT INTO vehicles (name, month) VALUES (?, ?)", (name, month))
+    conn.commit()
 
-# Create tables if not exist
-c.execute('''CREATE TABLE IF NOT EXISTS drivers (
-                driver_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT,
-                license_number TEXT,
-                mobile TEXT
-            )''')
+def update_vehicle_expense(vehicle_id, petrol, toll, maintenance):
+    c.execute('''
+        UPDATE vehicles
+        SET petrol_expense = ?, toll_expense = ?, maintenance_expense = ?
+        WHERE vehicle_id = ?
+    ''', (petrol, toll, maintenance, vehicle_id))
+    conn.commit()
 
-c.execute('''CREATE TABLE IF NOT EXISTS vehicles (
-                vehicle_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT
-            )''')
+def get_drivers():
+    df = pd.read_sql_query("SELECT * FROM drivers", conn)
+    return df
 
-c.execute('''CREATE TABLE IF NOT EXISTS expenses (
-                expense_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                vehicle_id INTEGER,
-                date TEXT,
-                petrol REAL,
-                toll REAL,
-                maintenance REAL,
-                FOREIGN KEY(vehicle_id) REFERENCES vehicles(vehicle_id)
-            )''')
+def get_vehicles():
+    df = pd.read_sql_query("SELECT * FROM vehicles", conn)
+    return df
 
-conn.commit()
+# --------------------------
+# Sidebar menu
+# --------------------------
+menu = ["Dashboard", "Driver Details", "Vehicle Maintenance & Expense", "Monthly Summary", "Logout"]
+choice = st.sidebar.selectbox("📋 Menu", menu)
 
-# -------- Admin Login --------
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
+# --------------------------
+# Dashboard
+# --------------------------
+if choice == "Dashboard":
+    st.title("👨‍💼 Admin Dashboard")
+    st.write("Welcome, Admin! Manage your transport business from one place.")
+    st.write(f"**Date & Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-if not st.session_state.logged_in:
-    st.title("🚛 Transport Management System")
-    st.write(f"Date & Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    st.subheader("👨‍💼 Admin Login")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-    if st.button("Login"):
-        if username == "admin" and password == "admin123":
-            st.session_state.logged_in = True
-            st.experimental_rerun()
-        else:
-            st.error("Invalid username or password")
-else:
-    # -------- Sidebar Menu --------
-    st.sidebar.title("📋 Menu")
-    menu = st.sidebar.radio("Go to", ["🏠 Dashboard",
-                                      "🧑‍✈️ Driver Details",
-                                      "🛠️ Vehicle Maintenance & Expense",
-                                      "📊 Monthly Summary",
-                                      "🚪 Logout"])
+# --------------------------
+# Driver Details
+# --------------------------
+elif choice == "Driver Details":
+    st.title("🧑‍✈️ Driver Personal Details")
     
-    if menu == "🏠 Dashboard":
-        st.title("👨‍💼 Admin Dashboard")
-        st.write("Welcome, Admin! Manage your transport business from one place.")
+    st.subheader("Add New Driver")
+    name = st.text_input("Driver Name")
+    license_number = st.text_input("License Number")
+    mobile = st.text_input("Mobile Number")
+    if st.button("Add Driver"):
+        insert_driver(name, license_number, mobile)
+        st.success(f"Driver '{name}' added successfully!")
+
+    st.subheader("All Drivers")
+    drivers_df = get_drivers()
+    st.dataframe(drivers_df)
+
+# --------------------------
+# Vehicle Maintenance & Expense
+# --------------------------
+elif choice == "Vehicle Maintenance & Expense":
+    st.title("🛠️ Vehicle Maintenance & Expense")
     
-    elif menu == "🧑‍✈️ Driver Details":
-        st.title("🧑‍✈️ Driver Details")
-        with st.form("add_driver"):
-            name = st.text_input("Driver Name")
-            license_num = st.text_input("License Number")
-            mobile = st.text_input("Mobile Number")
-            submitted = st.form_submit_button("Add Driver")
-            if submitted:
-                c.execute("INSERT INTO drivers (name, license_number, mobile) VALUES (?, ?, ?)",
-                          (name, license_num, mobile))
-                conn.commit()
-                st.success("Driver added successfully!")
-
-        st.subheader("Existing Drivers")
-        df_drivers = pd.read_sql("SELECT * FROM drivers", conn)
-        st.dataframe(df_drivers)
+    st.subheader("Add New Vehicle")
+    vehicle_name = st.text_input("Vehicle Name")
+    if st.button("Add Vehicle"):
+        insert_vehicle(vehicle_name)
+        st.success(f"Vehicle '{vehicle_name}' added successfully!")
     
-    elif menu == "🛠️ Vehicle Maintenance & Expense":
-        st.title("🛠️ Vehicle Maintenance & Expense")
-        # Add vehicle
-        with st.form("add_vehicle"):
-            vehicle_name = st.text_input("Vehicle Name")
-            v_submitted = st.form_submit_button("Add Vehicle")
-            if v_submitted:
-                c.execute("INSERT INTO vehicles (name) VALUES (?)", (vehicle_name,))
-                conn.commit()
-                st.success("Vehicle added successfully!")
-        # List vehicles
-        df_vehicles = pd.read_sql("SELECT * FROM vehicles", conn)
-        st.subheader("Vehicles")
-        st.dataframe(df_vehicles)
-
-        # Add expense
-        with st.form("add_expense"):
-            vehicle_id = st.selectbox("Select Vehicle ID", df_vehicles['vehicle_id'] if not df_vehicles.empty else [])
-            expense_date = st.date_input("Expense Date", date.today())
-            petrol = st.number_input("Petrol Expense", 0.0)
-            toll = st.number_input("Tollgate Expense", 0.0)
-            maintenance = st.number_input("Maintenance Expense", 0.0)
-            e_submitted = st.form_submit_button("Add Expense")
-            if e_submitted:
-                c.execute("""INSERT INTO expenses (vehicle_id, date, petrol, toll, maintenance)
-                             VALUES (?, ?, ?, ?, ?)""",
-                          (vehicle_id, expense_date, petrol, toll, maintenance))
-                conn.commit()
-                st.success("Expense added successfully!")
-
-        st.subheader("Expenses")
-        df_expenses = pd.read_sql("SELECT * FROM expenses", conn)
-        st.dataframe(df_expenses)
+    st.subheader("Update Vehicle Expenses")
+    vehicles_df = get_vehicles()
+    st.dataframe(vehicles_df)
     
-    elif menu == "📊 Monthly Summary":
-        st.title("📊 Monthly Summary")
-        df = pd.read_sql("SELECT date, SUM(petrol+toll+maintenance) as total_expense FROM expenses GROUP BY date", conn)
-        if not df.empty:
-            df['date'] = pd.to_datetime(df['date'])
-            fig = px.bar(df, x='date', y='total_expense', title="Daily Expenses")
-            st.plotly_chart(fig)
-        else:
-            st.info("No expense data available.")
+    if not vehicles_df.empty:
+        selected_vehicle = st.selectbox("Select Vehicle to Update", vehicles_df['vehicle_id'])
+        petrol = st.number_input("Petrol Expense", min_value=0.0, step=0.1)
+        toll = st.number_input("Toll Expense", min_value=0.0, step=0.1)
+        maintenance = st.number_input("Maintenance Expense", min_value=0.0, step=0.1)
+        if st.button("Update Expenses"):
+            update_vehicle_expense(selected_vehicle, petrol, toll, maintenance)
+            st.success("Vehicle expenses updated successfully!")
 
-    elif menu == "🚪 Logout":
-        st.session_state.logged_in = False
-        st.rerun()
+# --------------------------
+# Monthly Summary
+# --------------------------
+elif choice == "Monthly Summary":
+    st.title("📊 Monthly Expense Summary")
+    vehicles_df = get_vehicles()
+    if not vehicles_df.empty:
+        vehicles_df['total_expense'] = vehicles_df['petrol_expense'] + vehicles_df['toll_expense'] + vehicles_df['maintenance_expense']
+        fig = px.bar(vehicles_df, x='name', y='total_expense', title="Total Expenses per Vehicle")
+        st.plotly_chart(fig)
+        st.dataframe(vehicles_df[['name','petrol_expense','toll_expense','maintenance_expense','total_expense','month']])
+
+# --------------------------
+# Logout
+# --------------------------
+elif choice == "Logout":
+    st.warning("You have logged out!")
