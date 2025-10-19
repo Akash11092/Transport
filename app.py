@@ -1,4 +1,34 @@
 # app.py
+import sqlite3
+
+# Connect to database (will create if not exists)
+conn = sqlite3.connect("transport.db", check_same_thread=False)
+c = conn.cursor()
+
+# Create drivers table if it doesn't exist
+c.execute('''
+CREATE TABLE IF NOT EXISTS drivers (
+    driver_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    license_number TEXT,
+    mobile TEXT
+)
+''')
+
+# Create vehicles table if needed
+c.execute('''
+CREATE TABLE IF NOT EXISTS vehicles (
+    vehicle_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vehicle_name TEXT,
+    petrol_expense REAL,
+    toll_expense REAL,
+    maintenance_expense REAL,
+    month TEXT
+)
+''')
+
+conn.commit()
+
 import streamlit as st
 import sqlite3
 import pandas as pd
