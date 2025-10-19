@@ -12,7 +12,7 @@ st.set_page_config(page_title="Transport Management System", layout="wide")
 conn = sqlite3.connect("transport.db", check_same_thread=False)
 c = conn.cursor()
 
-# Create tables if they don't exist
+# Create tables if not exist
 c.execute('''
 CREATE TABLE IF NOT EXISTS drivers (
     driver_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,6 +45,17 @@ def insert_driver(name, license_number, mobile):
 
 def insert_vehicle(name):
     month = datetime.now().strftime("%Y-%m")
+    # Ensure table exists
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS vehicles (
+            vehicle_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            petrol_expense REAL DEFAULT 0,
+            toll_expense REAL DEFAULT 0,
+            maintenance_expense REAL DEFAULT 0,
+            month TEXT
+        )
+    ''')
     c.execute("INSERT INTO vehicles (name, month) VALUES (?, ?)", (name, month))
     conn.commit()
 
